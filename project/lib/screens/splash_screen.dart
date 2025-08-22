@@ -32,11 +32,11 @@ class _SplashScreenState extends State<SplashScreen> {
       return;
     }
 
-    // Logged in → fetch role
+    // Logged in → fetch role + business_id
     final userId = session.user.id;
     final userData = await supabase
         .from('users')
-        .select('role')
+        .select('role, business_id')
         .eq('id', userId)
         .maybeSingle();
 
@@ -49,23 +49,39 @@ class _SplashScreenState extends State<SplashScreen> {
       return;
     }
 
-    final role = userData['role'];
+    final role = userData['role'] as String?;
+    final businessId = userData['business_id'] as String?;
+
+    if (businessId == null) {
+      // No business assigned → force login or handle error
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => const LoginScreen()),
+      );
+      return;
+    }
 
     if (role == 'cashier') {
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(builder: (_) => const OrderScreen()),
+        MaterialPageRoute(
+          builder: (_) => OrderScreen(businessId: businessId),
+        ),
       );
     } else if (role == 'kitchen') {
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(builder: (_) => const KitchenScreen()),
+        MaterialPageRoute(
+          builder: (_) => KitchenScreen(businessId: businessId),
+        ),
       );
     } else {
       // Default fallback
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(builder: (_) => const OrderScreen()),
+        MaterialPageRoute(
+          builder: (_) => OrderScreen(businessId: businessId),
+        ),
       );
     }
   }

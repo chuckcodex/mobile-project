@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class OrderScreen extends StatefulWidget {
-  final String businessId; // Pass this in when navigating to the screen
+  final String businessId;
 
   const OrderScreen({Key? key, required this.businessId}) : super(key: key);
 
@@ -18,7 +18,7 @@ class _OrderScreenState extends State<OrderScreen> {
   void initState() {
     super.initState();
     _fetchOrders();
-    _subscribeToOrders();
+    // Real-time subscription temporarily disabled
   }
 
   Future<void> _fetchOrders() async {
@@ -33,22 +33,28 @@ class _OrderScreenState extends State<OrderScreen> {
     });
   }
 
-  void _subscribeToOrders() {
-    _supabase
-        .channel('public:orders')
-        .on(
-          RealtimeListenTypes.postgresChanges,
-          ChannelFilter(
-            event: '*',
-            schema: 'public',
-            table: 'orders',
-            filter: 'business_id=eq.${widget.businessId}',
-          ),
-          (payload, [ref]) {
-            _fetchOrders();
-          },
-        )
-        .subscribe();
+  Future<void> _updateOrderStatus(String orderId, String currentStatus) async {
+    final nextStatus = _getNextStatus(currentStatus);
+    if (nextStatus == null) return;
+
+    await _supabase
+        .from('orders')
+        .update({'status': nextStatus})
+        .eq('id', orderId);
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Order updated to "$nextStatus"')),
+    );
+
+    // Refresh list after update
+    _fetchOrders();
+  }
+
+  String? _getNextStatus(String current) {
+    const flow = ['pending', 'preparing', 'ready', 'completed'];
+    final index = flow.indexOf(current);
+    if (index == -1 || index == flow.length - 1) return null;
+    return flow[index + 1];
   }
 
   @override
@@ -67,36 +73,19 @@ class _OrderScreenState extends State<OrderScreen> {
                     subtitle: Text(
                       'Status: ${order['status']}\nCreated: ${order['created_at']}',
                     ),
-                    trailing: _statusChip(order['status']),
+                    trailing: ElevatedButton(
+                      onPressed: () => _updateOrderStatus(
+                        order['id'],
+                        order['status'],
+                      ),
+                      child: Text(
+                        _getNextStatus(order['status']) ?? 'Done',
+                      ),
+                    ),
                   ),
                 );
               },
             ),
-    );
-  }
-
-  Widget _statusChip(String status) {
-    Color color;
-    switch (status) {
-      case 'pending':
-        color = Colors.orange;
-        break;
-      case 'preparing':
-        color = Colors.blue;
-        break;
-      case 'ready':
-        color = Colors.green;
-        break;
-      case 'completed':
-        color = Colors.grey;
-        break;
-      default:
-        color = Colors.black;
-    }
-    return Chip(
-      label: Text(status),
-      backgroundColor: color.withOpacity(0.2),
-      labelStyle: TextStyle(color: color),
     );
   }
 }
